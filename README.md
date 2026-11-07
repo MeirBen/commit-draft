@@ -5,7 +5,7 @@ A small VS Code extension that turns your current Git diff into an editable comm
 ## Install and use
 
 1. Install and sign in to [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) or [Claude Code](https://code.claude.com/docs/en/setup). Confirm the selected tool works in a terminal.
-2. In VS Code, run **Extensions: Install from VSIX…** from the Command Palette and choose `codex-claude-commit-0.1.1.vsix`.
+2. In VS Code, run **Extensions: Install from VSIX…** from the Command Palette and choose `dist/codex-claude-commit-0.1.1.vsix`. To build it from source, follow the development commands below.
 3. Run **Codex / Claude: Select Commit Message Provider** to select Codex or Claude. Codex is the default.
 4. Open a trusted Git repository and save your edits. Stage the changes you intend to commit.
 5. Click the **sparkle** action in that repository's Source Control header, or run **Codex / Claude: Generate Commit Message**.
@@ -81,7 +81,19 @@ npm run test:integration
 npm run package
 ```
 
+All build and package output lives in `dist/`:
+
+| Command | Output |
+| --- | --- |
+| `npm run build` | `dist/extension.js` and its development source map |
+| `npm test` | Development build plus compiled unit-test modules in `dist/test/` |
+| `npm run package` | Production bundle and `dist/codex-claude-commit-<version>.vsix` |
+
+Each build clears `dist/` first, including any previously generated VSIX. `npm run clean` removes `dist/` without rebuilding. Packaging uses `vsce`'s native output-directory option and automatically takes the filename from the package name and version. Test modules and source maps are excluded from the VSIX.
+
 `npm test` type-checks, builds and runs tests against real temporary Git repositories and child processes. `test:integration` uses the official VS Code test runner with a disposable editor profile, two repositories and fake external AI executables; it makes no AI requests. On Linux without a display, run it with `xvfb-run -a npm run test:integration`. Set `VSCODE_EXECUTABLE_PATH` to an existing VS Code executable to avoid a test-editor download.
+
+The test runner's optional VS Code download cache (`.vscode-test/`) and installed dependencies (`node_modules/`) are managed by their tools and retained across builds.
 
 The executable fixtures for provider and extension-host tests require macOS/Linux; Windows child-process behavior needs native-platform validation. Runtime integration has been exercised on Linux with VS Code 1.145.2. Press F5 in this project to launch an Extension Development Host. Source maps are included in the development build; the VSIX contains the production bundle only.
 

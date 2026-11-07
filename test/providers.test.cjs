@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const { mkdtemp, writeFile, rm, access, readFile } = require('node:fs/promises');
 const { join } = require('node:path');
 const { tmpdir } = require('node:os');
-const { generateMessage } = require('../out/providers.js');
-const { buildPrompt, normalizeMessage } = require('../out/message.js');
+const { generateMessage } = require('../dist/test/providers.js');
+const { buildPrompt, normalizeMessage } = require('../dist/test/message.js');
 
 const snapshot = { source: 'staged', text: 'diff --git a/a.txt b/a.txt\n-old\n+new\n', head: 'abc' };
 

@@ -123,11 +123,12 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "npm run check && node scripts/build.mjs",
-    "test": "npm run build && node --test test/*.test.cjs",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run check && npm run clean && node scripts/build.mjs",
+    "test": "npm run build -- --test && node --test test/*.test.cjs",
     "test:integration": "npm run build && node scripts/run-integration.cjs",
     "vscode:prepublish": "npm run build -- --production",
-    "package": "vsce package --no-dependencies --allow-missing-repository"
+    "package": "vsce package --no-dependencies --allow-missing-repository --out dist"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

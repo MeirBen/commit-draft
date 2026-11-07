@@ -4,7 +4,7 @@ const { mkdtemp, writeFile, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { collectDiff } = require('../out/diff.js');
+const { collectDiff } = require('../dist/test/diff.js');
 
 async function repository(t, initialCommit = true) {
   const cwd = await mkdtemp(join(tmpdir(), 'commit-diff-test-'));
