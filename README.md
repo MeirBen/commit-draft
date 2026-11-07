@@ -2,16 +2,18 @@
 
 A small VS Code extension that turns your current Git diff into an editable commit-message draft using your installed **Codex CLI** or **Claude Code**. It fills the existing Source Control message field. There are no runtime npm dependencies, webviews, stored API keys or extension telemetry.
 
+This branch is an **experimental inline-action trial**. It uses VS Code's `contribSourceControlInputBoxMenu` proposal to place the action inside the commit-message field. Proposed APIs require explicit enablement, can change between VS Code releases, and are unsuitable for Marketplace publication. The previous stable toolbar implementation remains on `main`.
+
 ## Install and use
 
 1. Install and sign in to [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) or [Claude Code](https://code.claude.com/docs/en/setup). Confirm the selected tool works in a terminal.
-2. In VS Code, run **Extensions: Install from VSIX…** from the Command Palette and choose `dist/codex-claude-commit-0.1.1.vsix`. To build it from source, follow the development commands below.
+2. For a source trial, follow the development commands below and press **F5**; the launch configuration enables the proposal. For a packaged trial, install `dist/codex-claude-commit-0.1.2.vsix` using **Extensions: Install from VSIX…**, then fully restart the trial editor with `--enable-proposed-api=local-tools.codex-claude-commit`. VS Code's documented proposed-API workflow uses Insiders.
 3. Run **Codex / Claude: Select Commit Message Provider** to select Codex or Claude. Codex is the default.
 4. Open a trusted Git repository and save your edits. Stage the changes you intend to commit.
-5. Click the **sparkle** action in that repository's Source Control header, or run **Codex / Claude: Generate Commit Message**.
+5. Click the **extension icon** inside that repository's commit-message field, or run **Generate Commit Message with Codex / Claude**. If another provider is present, choose our action from the field's action dropdown; VS Code remembers the selected action. The inline **Stop** button cancels generation.
 6. Review and edit the generated message, then commit using VS Code as usual.
 
-Requires desktop VS Code 1.95+ and Git. Current CLIs are required for the restrictive execution flags; CLI contracts were checked against Codex 0.164.0 and Claude Code 2.1.312. The extension does not use either provider's VS Code chat panel or internal extension commands.
+The inline trial was tested with desktop VS Code 1.145.2, the proposal explicitly enabled, and Git. Current CLIs are required for the restrictive execution flags; CLI contracts were checked against Codex 0.164.0 and Claude Code 2.1.312. The extension does not use either provider's VS Code chat panel or internal extension commands.
 
 ## Which changes are used?
 
@@ -55,7 +57,7 @@ Clicking Generate sends the chosen diff to the selected AI provider using your e
 
 Each provider runs in a new temporary directory. The prompt travels through stdin rather than command arguments. Codex runs non-interactively, ephemerally and read-only, with user configuration, shell tools, apps, plugins and web search disabled. Claude runs in safe mode, with built-in tools and MCP tools disabled and session persistence off. Managed organizational policies still apply. These flags do not change the provider's server-side retention policy.
 
-Process execution uses Node's native asynchronous `spawn` with `shell: false`, bounded stdout, cancellation and a timeout. Cancellation stops the process group on macOS/Linux and uses Windows' native `taskkill /T /F` for the process tree on Windows. Cleanup finishes before the temporary directory is removed. Git external diff and text conversion drivers are disabled. Patch context is fixed to three lines; inherited `GIT_DIFF_OPTS` and `diff.interHunkContext` cannot expand the context sent to the provider. No shell quoting, UI automation, private chat-extension APIs or proposed VS Code APIs are used.
+Process execution uses Node's native asynchronous `spawn` with `shell: false`, bounded stdout, cancellation and a timeout. Cancellation stops the process group on macOS/Linux and uses Windows' native `taskkill /T /F` for the process tree on Windows. Cleanup finishes before the temporary directory is removed. Git external diff and text conversion drivers are disabled. Patch context is fixed to three lines; inherited `GIT_DIFF_OPTS` and `diff.interHunkContext` cannot expand the context sent to the provider. The only proposed API is the inline menu contribution. Runtime behavior uses no shell quoting, UI automation or private chat-extension APIs.
 
 Diff selection, validation and insertion rules are deterministic. AI-generated wording is not guaranteed to be identical between requests, even with the same diff and model. The result always remains a draft for human review.
 
@@ -91,6 +93,8 @@ All build and package output lives in `dist/`:
 
 Each build clears `dist/` first, including any previously generated VSIX. `npm run clean` removes `dist/` without rebuilding. Packaging uses `vsce`'s native output-directory option and automatically takes the filename from the package name and version. Test modules and source maps are excluded from the VSIX.
 
+The inline icon uses VS Code's native [`contributes.icons`](https://code.visualstudio.com/api/references/contribution-points#contributes.icons) registration. `resources/commit-draft.woff` contains one monochrome glyph (U+E001), with editable artwork in `resources/commit-draft.svg`; VS Code supplies theme colors and button states.
+
 `npm test` type-checks, builds and runs tests against real temporary Git repositories and child processes. `test:integration` uses the official VS Code test runner with a disposable editor profile, two repositories and fake external AI executables; it makes no AI requests. On Linux without a display, run it with `xvfb-run -a npm run test:integration`. Set `VSCODE_EXECUTABLE_PATH` to an existing VS Code executable to avoid a test-editor download.
 
 The test runner's optional VS Code download cache (`.vscode-test/`) and installed dependencies (`node_modules/`) are managed by their tools and retained across builds.
@@ -99,9 +103,9 @@ The executable fixtures for provider and extension-host tests require macOS/Linu
 
 TypeScript uses `module: "preserve"` and `moduleResolution: "bundler"` to match esbuild's source resolution. esbuild emits the CommonJS bundle expected by the extension host. The configuration passes both the pinned TypeScript 5.9.3 compiler and TypeScript 6.0.3 without deprecation suppression.
 
-Validation on November 7, 2026: all 30 unit tests and 16 extension-host scenarios passed. Coverage includes malformed settings, Git startup and cancellation, native shutdown cleanup, and user-configured Git context. Earlier real requests using a small synthetic diff also passed with Codex 0.164.0 and Claude Code 2.1.312; provider invocation flags are unchanged. Windows and macOS have not been exercised; the Windows process-tree implementation uses the documented native command.
+Validation on November 7, 2026: all 30 unit tests and 18 extension-host scenarios passed. The inline argument and cancellation contract is covered by the extension-host suite. A separate UI smoke test also clicked the actual inline Generate and Stop actions in an isolated editor and verified insertion, cancellation and temporary-directory cleanup. Earlier real requests using a small synthetic diff passed with Codex 0.164.0 and Claude Code 2.1.312; provider invocation flags are unchanged. Windows and macOS have not been exercised; the Windows process-tree implementation uses the documented native command.
 
-The package uses the local publisher identifier `local-tools` for installation from VSIX. Publishing to the Marketplace requires your own publisher identity and repository metadata; this project has not been published.
+The package uses the local publisher identifier `local-tools` for installation from VSIX. This experimental package is for local trials and has not been published.
 
 ## Official references
 
@@ -111,5 +115,6 @@ The package uses the local publisher identifier `local-tools` for installation f
 - [Claude programmatic use](https://code.claude.com/docs/en/headless) and [CLI reference](https://code.claude.com/docs/en/cli-reference)
 - [VS Code testing](https://code.visualstudio.com/api/working-with-extensions/testing-extension) and [VSIX packaging](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)
 - [VS Code activation and deactivation](https://code.visualstudio.com/api/get-started/extension-anatomy) and [TypeScript bundler resolution](https://www.typescriptlang.org/docs/handbook/modules/reference.html#bundler)
+- [VS Code proposed-API development and local installation](https://code.visualstudio.com/api/advanced-topics/using-proposed-api)
 - [Git diff options](https://git-scm.com/docs/git-diff) and [Git environment variables](https://git-scm.com/docs/git#_environment_variables)
 - [Node child processes](https://nodejs.org/api/child_process.html) and [Windows process-tree termination](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/taskkill)

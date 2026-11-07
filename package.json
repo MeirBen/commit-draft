@@ -3,7 +3,7 @@
   "displayName": "Codex / Claude Commit Message",
   "description": "Generate a commit-message draft from your Git diff using your installed Codex or Claude CLI.",
   "icon": "resources/icon.png",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "local-tools",
   "license": "MIT",
   "engines": {
@@ -27,6 +27,10 @@
   "extensionDependencies": [
     "vscode.git"
   ],
+  "enabledApiProposals": [
+    "contribSourceControlInputBoxMenu"
+  ],
+  "preview": true,
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
@@ -38,12 +42,20 @@
     }
   },
   "contributes": {
+    "icons": {
+      "commit-draft-generate": {
+        "description": "Generate a commit-message draft.",
+        "default": {
+          "fontPath": "resources/commit-draft.woff",
+          "fontCharacter": "\\E001"
+        }
+      }
+    },
     "commands": [
       {
         "command": "commitDraft.generate",
-        "title": "Generate Commit Message",
-        "category": "Codex / Claude",
-        "icon": "$(sparkle)",
+        "title": "Generate Commit Message with Codex / Claude",
+        "icon": "$(commit-draft-generate)",
         "enablement": "isWorkspaceTrusted"
       },
       {
@@ -53,11 +65,11 @@
       }
     ],
     "menus": {
-      "scm/title": [
+      "scm/inputBox": [
         {
           "command": "commitDraft.generate",
           "when": "scmProvider == git",
-          "group": "navigation@20"
+          "group": "navigation"
         }
       ]
     },

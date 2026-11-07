@@ -112,6 +112,24 @@ exports.run = async () => {
   }
   console.log('PASS: native progress cancellation preserves the input and exits quietly');
 
+  first.inputBox.value = '';
+  await rm(join(root, 'started'), { force: true });
+  const inlineCancellation = new vscode.CancellationTokenSource();
+  try {
+    const cancelled = vscode.commands.executeCommand('commitDraft.generate', first.rootUri, [], inlineCancellation.token);
+    await until(() => exists(join(root, 'started')));
+    inlineCancellation.cancel();
+    await cancelled;
+    assert.equal(first.inputBox.value, '', 'The inline Stop action must prevent insertion.');
+    assert.equal(errors.length, 1);
+    console.log('PASS: native inline command arguments target the repository and honor its cancellation token');
+
+    const callsBefore = await readFile(join(root, 'calls'), 'utf8');
+    await vscode.commands.executeCommand('commitDraft.generate', first.rootUri, [], inlineCancellation.token);
+    assert.equal(await readFile(join(root, 'calls'), 'utf8'), callsBefore);
+    console.log('PASS: an already cancelled inline action does not invoke a provider');
+  } finally { inlineCancellation.dispose(); }
+
   const warning = vscode.window.showWarningMessage;
   try {
     const callsBefore = await readFile(join(root, 'calls'), 'utf8');

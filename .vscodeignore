@@ -1,6 +1,7 @@
 **/*
 !dist/extension.js
 !resources/icon.png
+!resources/commit-draft.woff
 !package.json
 !README.md
 !LICENSE

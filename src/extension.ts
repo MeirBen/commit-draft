@@ -20,7 +20,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }));
   context.subscriptions.push(vscode.commands.registerCommand('commitDraft.generate',
-    (sourceControl?: unknown) => generateCommitMessage(sourceControl, active)));
+    (sourceControl?: unknown, _changes?: unknown, token?: vscode.CancellationToken) =>
+      generateCommitMessage(sourceControl, active, token)));
 }
 
 export async function deactivate(): Promise<void> {
@@ -30,16 +31,18 @@ export async function deactivate(): Promise<void> {
 }
 
 async function withProgress(title: string,
-  task: (progress: vscode.Progress<{ message?: string }>, signal: AbortSignal) => Promise<void>): Promise<void> {
+  task: (progress: vscode.Progress<{ message?: string }>, signal: AbortSignal) => Promise<void>,
+  inputToken?: vscode.CancellationToken): Promise<void> {
   if (stopping) { return; }
   const controller = new AbortController();
   const operation = Promise.resolve(vscode.window.withProgress({
     location: vscode.ProgressLocation.Notification, title, cancellable: true,
   }, async (progress, token) => {
     const subscription = token.onCancellationRequested(() => controller.abort());
-    if (token.isCancellationRequested) { controller.abort(); }
+    const inputSubscription = inputToken?.onCancellationRequested(() => controller.abort());
+    if (token.isCancellationRequested || inputToken?.isCancellationRequested) { controller.abort(); }
     try { await task(progress, controller.signal); }
-    finally { subscription.dispose(); }
+    finally { subscription.dispose(); inputSubscription?.dispose(); }
   }));
   pending.set(controller, operation);
   try { await operation; }
@@ -65,9 +68,9 @@ async function waitForGit(git: GitAPI, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function generateCommitMessage(sourceControl: unknown, active: Set<string>): Promise<void> {
+async function generateCommitMessage(sourceControl: unknown, active: Set<string>, inputToken?: vscode.CancellationToken): Promise<void> {
   try {
-    if (stopping) { return; }
+    if (stopping || inputToken?.isCancellationRequested) { return; }
     if (!vscode.workspace.isTrusted) { throw new Error('Trust this workspace before running the commit-message tool.'); }
     const extension = vscode.extensions.getExtension<GitExtension>('vscode.git');
     if (!extension) { throw new Error('Enable VS Code’s built-in Git extension first.'); }
@@ -76,7 +79,7 @@ async function generateCommitMessage(sourceControl: unknown, active: Set<string>
     if (!gitExtension.enabled) { throw new Error('Enable Git in VS Code settings and ensure Git is installed.'); }
     const git = gitExtension.getAPI(1);
     if (git.state !== 'initialized') {
-      await withProgress('Waiting for Git repositories', (_progress, signal) => waitForGit(git, signal));
+      await withProgress('Waiting for Git repositories', (_progress, signal) => waitForGit(git, signal), inputToken);
     }
     if (stopping) { return; }
     const repository = await chooseRepository(git, sourceControl);
@@ -116,7 +119,7 @@ async function generateCommitMessage(sourceControl: unknown, active: Set<string>
           }
           currentRepository.inputBox.value = message;
           await vscode.commands.executeCommand('workbench.view.scm');
-        });
+        }, inputToken);
     } finally {
       active.delete(key);
     }
