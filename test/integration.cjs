@@ -149,5 +149,119 @@ exports.run = async () => {
   await changedHead;
   assert.equal(first.inputBox.value, '');
   console.log('PASS: a changing HEAD prevents insertion even when the staged diff is unchanged');
+
+  const getConfiguration = vscode.workspace.getConfiguration;
+  const invalidSettings = [
+    ['provider', 'unknown'], ['codexPath', null], ['codexPath', 123],
+    ['codexModel', 123], ['conventionalCommits', 'false'],
+    ['timeoutSeconds', '120'], ['maxDiffBytes', null],
+  ];
+  await config.update('provider', 'codex', vscode.ConfigurationTarget.Global);
+  first.inputBox.value = 'Keep my existing draft';
+  let replacementPrompts = 0;
+  const callsBeforeInvalid = await readFile(join(root, 'calls'), 'utf8');
+  vscode.window.showWarningMessage = async () => { replacementPrompts++; return undefined; };
+  try {
+    for (const [key, value] of invalidSettings) {
+      vscode.workspace.getConfiguration = (...args) => {
+        const actual = getConfiguration(...args);
+        return args[0] !== 'commitDraft' ? actual : {
+          ...actual, get: (name, fallback) => name === key ? value : actual.get(name, fallback),
+        };
+      };
+      const errorCount = errors.length;
+      await generate(first);
+      assert.equal(errors.length, errorCount + 1, `${key} must be rejected before prompting`);
+      assert.ok(errors.at(-1).includes(`commitDraft.${key}`), errors.at(-1));
+    }
+    assert.equal(replacementPrompts, 0);
+    assert.equal(first.inputBox.value, 'Keep my existing draft');
+    assert.equal(await readFile(join(root, 'calls'), 'utf8'), callsBeforeInvalid);
+  } finally {
+    vscode.workspace.getConfiguration = getConfiguration;
+    vscode.window.showWarningMessage = warning;
+  }
+  console.log('PASS: malformed settings produce actionable errors before prompting or launching a provider');
+
+  const getExtension = vscode.extensions.getExtension;
+  const stateChanged = new vscode.EventEmitter();
+  let initialized = false;
+  let repositoryReads = 0;
+  const startingGit = {
+    git: git.git,
+    get state() { return initialized ? 'initialized' : 'uninitialized'; },
+    onDidChangeState: stateChanged.event,
+    get repositories() { repositoryReads++; return initialized ? git.repositories : []; },
+  };
+  first.inputBox.value = '';
+  try {
+    vscode.extensions.getExtension = id => id === 'vscode.git'
+      ? { activate: async () => ({ enabled: true, getAPI: () => startingGit }) }
+      : getExtension(id);
+    const errorCount = errors.length;
+    const starting = generate(first);
+    await delay(100);
+    assert.equal(repositoryReads, 0, 'Repository selection must wait for Git initialization.');
+    initialized = true;
+    stateChanged.fire('initialized');
+    await starting;
+    assert.equal(errors.length, errorCount);
+    assert.equal(first.inputBox.value, 'Update the first example');
+    console.log('PASS: Git startup waits for its native initialization event before selecting a repository');
+
+    initialized = false;
+    const startupCancellation = new vscode.CancellationTokenSource();
+    let waitingForGit = false;
+    const callsBeforeCancel = await readFile(join(root, 'calls'), 'utf8');
+    const readsBeforeCancel = repositoryReads;
+    vscode.window.withProgress = (options, task) => withProgress(options, progress => {
+      waitingForGit = true;
+      return task(progress, startupCancellation.token);
+    });
+    try {
+      const cancelledStartup = generate(first);
+      await until(() => waitingForGit);
+      startupCancellation.cancel();
+      await cancelledStartup;
+      initialized = true;
+      stateChanged.fire('initialized');
+      assert.equal(repositoryReads, readsBeforeCancel);
+      assert.equal(await readFile(join(root, 'calls'), 'utf8'), callsBeforeCancel);
+      assert.equal(errors.length, errorCount);
+      console.log('PASS: cancelling Git startup exits quietly without selecting a repository or launching a provider');
+    } finally {
+      vscode.window.withProgress = withProgress;
+      startupCancellation.dispose();
+    }
+
+    vscode.extensions.getExtension = id => id === 'vscode.git'
+      ? { activate: async () => ({ enabled: false, getAPI: () => assert.fail('Disabled Git must not be accessed') }) }
+      : getExtension(id);
+    await generate(first);
+    assert.match(errors.at(-1), /Git.*disabled|[Ee]nable.*Git/);
+    console.log('PASS: disabled Git produces actionable guidance without accessing an unavailable API');
+  } finally {
+    vscode.extensions.getExtension = getExtension;
+    stateChanged.dispose();
+  }
+
+  first.inputBox.value = '';
+  await rm(join(root, 'started'), { force: true });
+  const shuttingDown = generate(first);
+  await until(() => exists(join(root, 'started')));
+  const shutdownRequest = JSON.parse(await readFile(join(root, 'request.json'), 'utf8'));
+  first.inputBox.value = 'Keep this on shutdown';
+  const errorCount = errors.length;
+  const lifecycle = require('../dist/extension.js');
+  assert.equal(typeof lifecycle.deactivate, 'function');
+  await lifecycle.deactivate();
+  assert.equal(await exists(shutdownRequest.cwd), false, 'Deactivation must await provider directory cleanup.');
+  await shuttingDown;
+  assert.equal(first.inputBox.value, 'Keep this on shutdown');
+  assert.equal(errors.length, errorCount);
+  const callsAfterShutdown = await readFile(join(root, 'calls'), 'utf8');
+  await generate(first);
+  assert.equal(await readFile(join(root, 'calls'), 'utf8'), callsAfterShutdown);
+  console.log('PASS: native deactivation awaits process and directory cleanup and prevents new requests');
   vscode.window.showErrorMessage = showErrorMessage;
 };

@@ -30,6 +30,7 @@ export async function generateMessage(options: ProviderOptions, snapshot: DiffSn
     const output = await runProcess(options.executable, args, {
       cwd, signal, input: buildPrompt(snapshot, options.conventional),
       timeoutMs: options.timeoutMs, maxBytes: 65536,
+      label: options.provider === 'codex' ? 'Codex' : 'Claude',
     });
     if (options.provider === 'codex') { return normalizeMessage(output); }
     let result: unknown;

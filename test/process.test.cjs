@@ -53,6 +53,22 @@ test('rejects command scripts that require a shell', async () => {
   await assert.rejects(runProcess('codex.cmd', [], options), /native|\.exe|\.cmd/i);
 });
 
+test('identifies the failing command without prescribing provider-only recovery', async () => {
+  await assert.rejects(run('process.exit(7)', { label: 'Git' }), error => {
+    assert.match(error.message, /Git.*exit code 7/);
+    assert.doesNotMatch(error.message, /signed in/);
+    return true;
+  });
+});
+
+test('does not suggest a diff setting for the fixed provider output limit', async () => {
+  await assert.rejects(run('process.stdout.write("x".repeat(2048))', { label: 'Claude' }), error => {
+    assert.match(error.message, /Claude.*too large/);
+    assert.doesNotMatch(error.message, /increase the diff limit/);
+    return true;
+  });
+});
+
 test('cancellation stops descendants even when they ignore SIGTERM', async t => {
   const cwd = await mkdtemp(join(tmpdir(), 'commit-cancel-test-'));
   t.after(() => rm(cwd, { recursive: true, force: true }));

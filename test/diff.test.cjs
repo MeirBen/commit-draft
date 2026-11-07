@@ -86,3 +86,23 @@ test('does not execute repository-configured external diff commands', async t =>
   await writeFile(file, 'changed\n');
   assert.match((await collectDiff('git', cwd)).text, /\+changed/);
 });
+
+test('keeps three context lines despite Git environment and inter-hunk settings', async t => {
+  const { cwd, git, file } = await repository(t);
+  const lines = Array.from({ length: 80 }, (_, index) => `line ${index}`);
+  await writeFile(file, lines.join('\n') + '\n');
+  git('commit', '-am', 'long example');
+  lines[10] = 'first change';
+  lines[60] = 'second change';
+  await writeFile(file, lines.join('\n') + '\n');
+  const baseline = await collectDiff('git', cwd);
+  git('config', 'diff.interHunkContext', '100');
+  const previous = process.env.GIT_DIFF_OPTS;
+  process.env.GIT_DIFF_OPTS = '--unified=100';
+  try {
+    assert.equal((await collectDiff('git', cwd)).text, baseline.text);
+  } finally {
+    if (previous === undefined) { delete process.env.GIT_DIFF_OPTS; }
+    else { process.env.GIT_DIFF_OPTS = previous; }
+  }
+});

@@ -7,6 +7,8 @@ export interface ProcessOptions {
   signal?: AbortSignal;
   timeoutMs: number;
   maxBytes: number;
+  label?: string;
+  env?: NodeJS.ProcessEnv;
 }
 
 export class ProcessError extends Error {
@@ -45,6 +47,7 @@ async function terminateProcessTree(child: ChildProcess): Promise<void> {
 }
 
 export function runProcess(executable: string, args: readonly string[], options: ProcessOptions): Promise<string> {
+  const label = options.label ?? 'Command';
   return new Promise((resolve, reject) => {
     if (options.signal?.aborted) { reject(abortError()); return; }
     if (/\.(cmd|bat)$/i.test(executable)) {
@@ -54,6 +57,7 @@ export function runProcess(executable: string, args: readonly string[], options:
 
     const child = spawn(executable, args, {
       cwd: options.cwd,
+      env: options.env,
       shell: false,
       windowsHide: true,
       detached: process.platform !== 'win32',
@@ -78,13 +82,13 @@ export function runProcess(executable: string, args: readonly string[], options:
     }
 
     const cancel = (): void => finish(abortError(), true);
-    const timeout = setTimeout(() => finish(new Error('The command timed out. Try again or increase the timeout in settings.'), true), options.timeoutMs);
+    const timeout = setTimeout(() => finish(new Error(`${label} timed out. Check the command in a terminal and try again.`), true), options.timeoutMs);
     options.signal?.addEventListener('abort', cancel, { once: true });
 
     child.stdout.on('data', (chunk: Buffer) => {
       if (settled) { return; }
       if (size + chunk.length > options.maxBytes) {
-        finish(new Error(`Command output is too large (limit ${options.maxBytes} bytes). Stage a smaller set of changes or increase the diff limit in settings.`), true);
+        finish(new Error(`${label} output is too large (limit ${options.maxBytes} bytes).`), true);
         return;
       }
       chunks.push(chunk);
@@ -94,13 +98,13 @@ export function runProcess(executable: string, args: readonly string[], options:
     child.stderr.resume();
     child.on('error', (error: NodeJS.ErrnoException) => {
       const message = error.code === 'ENOENT'
-        ? 'Executable not found. Install the selected CLI, restart VS Code, or set its absolute executable path in settings.'
-        : `Could not start the executable (${error.code ?? 'unknown error'}). Check its path and permissions.`;
+        ? `${label} executable not found. Check its installation and executable path, then restart VS Code.`
+        : `Could not start ${label} (${error.code ?? 'unknown error'}). Check its path and permissions.`;
       finish(new ProcessError(message));
     });
     child.on('close', (code, signal) => {
       finish(code === 0 ? undefined : new ProcessError(
-        `Command failed with exit code ${code ?? signal}. Check that the CLI is up to date and signed in using its terminal command.`, code ?? undefined));
+        `${label} failed with exit code ${code ?? signal}. Run the command in a terminal for details.`, code ?? undefined));
     });
     child.stdin.on('error', (error: NodeJS.ErrnoException) => {
       // A fast exit can close stdin before the prompt is written; let close report its exit code.

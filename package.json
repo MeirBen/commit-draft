@@ -2,7 +2,7 @@
   "name": "codex-claude-commit",
   "displayName": "Codex / Claude Commit Message",
   "description": "Generate a commit-message draft from your Git diff using your installed Codex or Claude CLI.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "local-tools",
   "license": "MIT",
   "engines": {
