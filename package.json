@@ -1,0 +1,140 @@
+{
+  "name": "codex-claude-commit",
+  "displayName": "Codex / Claude Commit Message",
+  "description": "Generate a commit-message draft from your Git diff using your installed Codex or Claude CLI.",
+  "version": "0.1.0",
+  "publisher": "local-tools",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0",
+    "node": ">=22"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "commit",
+    "codex",
+    "claude"
+  ],
+  "main": "./dist/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Runs your installed Git and AI command-line tools."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Requires a local Git checkout and installed command-line tools."
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "commitDraft.generate",
+        "title": "Generate Commit Message",
+        "category": "Codex / Claude",
+        "icon": "$(sparkle)",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "commitDraft.selectProvider",
+        "title": "Select Commit Message Provider",
+        "category": "Codex / Claude"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "commitDraft.generate",
+          "when": "scmProvider == git",
+          "group": "navigation@20"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Codex / Claude Commit Message",
+      "properties": {
+        "commitDraft.provider": {
+          "type": "string",
+          "enum": [
+            "codex",
+            "claude"
+          ],
+          "default": "codex",
+          "scope": "machine",
+          "description": "Installed CLI to use. It reuses that tool's existing sign-in."
+        },
+        "commitDraft.codexPath": {
+          "type": "string",
+          "default": "codex",
+          "scope": "machine",
+          "description": "Codex executable name or absolute path, without arguments. On Windows use a native .exe, not a .cmd shim."
+        },
+        "commitDraft.claudePath": {
+          "type": "string",
+          "default": "claude",
+          "scope": "machine",
+          "description": "Claude executable name or absolute path, without arguments. On Windows use a native .exe, not a .cmd shim."
+        },
+        "commitDraft.codexModel": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional Codex model. Empty uses the CLI's built-in default, without user config overrides."
+        },
+        "commitDraft.claudeModel": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional Claude model. Empty uses the CLI default."
+        },
+        "commitDraft.conventionalCommits": {
+          "type": "boolean",
+          "default": false,
+          "description": "Request Conventional Commits format, such as fix: or feat:."
+        },
+        "commitDraft.timeoutSeconds": {
+          "type": "integer",
+          "default": 120,
+          "minimum": 10,
+          "maximum": 600,
+          "scope": "machine",
+          "description": "Maximum seconds to wait for the selected AI tool."
+        },
+        "commitDraft.maxDiffBytes": {
+          "type": "integer",
+          "default": 102400,
+          "minimum": 1024,
+          "maximum": 1048576,
+          "scope": "machine",
+          "description": "Maximum diff size sent to the AI tool. Larger diffs are rejected, never silently truncated."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "npm run check && node scripts/build.mjs",
+    "test": "npm run build && node --test test/*.test.cjs",
+    "test:integration": "npm run build && node scripts/run-integration.cjs",
+    "vscode:prepublish": "npm run build -- --production",
+    "package": "vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/vscode": "1.95.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.1.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}
