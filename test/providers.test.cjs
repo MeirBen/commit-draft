@@ -6,7 +6,7 @@ const { tmpdir } = require('node:os');
 const { generateMessage } = require('../dist/test/providers.js');
 const { buildPrompt, normalizeMessage } = require('../dist/test/message.js');
 
-const snapshot = { source: 'staged', text: 'diff --git a/a.txt b/a.txt\n-old\n+new\n', head: 'abc' };
+const snapshot = { source: 'staged', text: 'diff --git a/a.txt b/a.txt\n-old\n+new secret value\n', condensed: false };
 
 async function fakeCli(t, provider, behavior = 'success') {
   const cwd = await mkdtemp(join(tmpdir(), 'provider-test-'));
@@ -25,6 +25,16 @@ process.stdin.on('end', () => {
   if (${JSON.stringify(behavior)} === 'fail') { process.exit(5); }
   if (${JSON.stringify(behavior)} === 'json-error') { console.log(JSON.stringify({type:'result',is_error:true,result:'provider failure'})); return; }
   if (${JSON.stringify(behavior)} === 'invalid') { console.log('not JSON'); return; }
+  if (${JSON.stringify(behavior)} === 'exit-json-error') {
+    console.log(JSON.stringify({type:'result',is_error:true,result:'There is an issue with the selected model.'}));
+    process.exit(1);
+  }
+  if (${JSON.stringify(behavior)} === 'echo-error') {
+    process.stderr.write('user\\n' + input + '\\n');
+    process.stderr.write('ERROR: ' + JSON.stringify({type:'error',status:400,error:{message:'The requested model is not supported.'}}) + '\\n');
+    process.exit(1);
+  }
+  if (${JSON.stringify(behavior)} === 'echo-fail') { process.stderr.write(input); process.exit(1); }
   const message = 'Update the example value';
   console.log(${JSON.stringify(provider)} === 'codex' ? message : JSON.stringify({type:'result',subtype:'success',is_error:false,result:message}));
 });
@@ -38,6 +48,8 @@ test('prompt describes the supplied diff without treating patch text as instruct
   assert.match(prompt, /staged/);
   assert.ok(prompt.includes(snapshot.text));
   assert.match(buildPrompt(snapshot, true), /Conventional Commits/);
+  assert.doesNotMatch(prompt, /condensed/);
+  assert.match(buildPrompt({ ...snapshot, condensed: true }, false), /condensed/);
 });
 
 test('normalizes a fenced commit draft while preserving its body', () => {
@@ -88,3 +100,42 @@ for (const behavior of ['fail', 'json-error', 'invalid', 'stall']) {
     await assert.rejects(access(request.cwd));
   });
 }
+
+const options = (provider, executable, overrides = {}) =>
+  ({ provider, executable, model: '', conventional: false, timeoutMs: 2000, ...overrides });
+
+test('shows the reason from a failing Claude JSON result', { skip: process.platform === 'win32' }, async t => {
+  const { executable } = await fakeCli(t, 'claude', 'exit-json-error');
+  await assert.rejects(generateMessage(options('claude', executable), snapshot),
+    /Claude reported an error: There is an issue with the selected model\./);
+});
+
+test('shows only the Codex ERROR line, never the echoed diff', { skip: process.platform === 'win32' }, async t => {
+  const { executable } = await fakeCli(t, 'codex', 'echo-error');
+  await assert.rejects(generateMessage(options('codex', executable), snapshot), error => {
+    assert.equal(error.message, 'Codex reported an error: The requested model is not supported.');
+    return true;
+  });
+});
+
+test('keeps the generic exit error when Codex prints no ERROR line', { skip: process.platform === 'win32' }, async t => {
+  const { executable } = await fakeCli(t, 'codex', 'echo-fail');
+  await assert.rejects(generateMessage(options('codex', executable), snapshot), error => {
+    assert.match(error.message, /Codex failed with exit code 1/);
+    assert.doesNotMatch(error.message, /secret value/);
+    return true;
+  });
+});
+
+test('points timeouts and missing executables at the setting that fixes them', { skip: process.platform === 'win32' }, async t => {
+  const { executable } = await fakeCli(t, 'codex', 'stall');
+  await assert.rejects(generateMessage(options('codex', executable, { timeoutMs: 300 }), snapshot), error => {
+    assert.equal(error.setting, 'timeoutSeconds');
+    assert.match(error.message, /did not finish within 0\.3 seconds/);
+    return true;
+  });
+  await assert.rejects(generateMessage(options('claude', '/nonexistent/claude-cli'), snapshot), error => {
+    assert.equal(error.setting, 'claudePath');
+    return true;
+  });
+});

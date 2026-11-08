@@ -2,12 +2,12 @@
 
 A small VS Code extension that turns your current Git diff into an editable commit-message draft using your installed **Codex CLI** or **Claude Code**. It fills the existing Source Control message field. There are no runtime npm dependencies, webviews, stored API keys or extension telemetry.
 
-This branch is an **experimental inline-action trial**. It uses VS Code's `contribSourceControlInputBoxMenu` proposal to place the action inside the commit-message field. Proposed APIs require explicit enablement, can change between VS Code releases, and are unsuitable for Marketplace publication. The previous stable toolbar implementation remains on `main`.
+The action sits inside the commit-message field through VS Code's `contribSourceControlInputBoxMenu` API proposal. Proposed APIs require explicit enablement, can change between VS Code releases, and are unsuitable for Marketplace publication.
 
 ## Install and use
 
 1. Install and sign in to [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) or [Claude Code](https://code.claude.com/docs/en/setup). Confirm the selected tool works in a terminal.
-2. For a source trial, follow the development commands below and press **F5**; the launch configuration enables the proposal. For a packaged trial, install `dist/codex-claude-commit-0.1.2.vsix` using **Extensions: Install from VSIX…**, then fully restart the trial editor with `--enable-proposed-api=local-tools.codex-claude-commit`. VS Code's documented proposed-API workflow uses Insiders.
+2. For a source trial, follow the development commands below and press **F5**; the launch configuration enables the proposal. For a packaged trial, install `dist/codex-claude-commit-0.2.0.vsix` using **Extensions: Install from VSIX…**, then fully restart the trial editor with `--enable-proposed-api=local-tools.codex-claude-commit`. VS Code's documented proposed-API workflow uses Insiders.
 3. Run **Codex / Claude: Select Commit Message Provider** to select Codex or Claude. Codex is the default.
 4. Open a trusted Git repository and save your edits. Stage the changes you intend to commit.
 5. Click the **extension icon** inside that repository's commit-message field, or run **Generate Commit Message with Codex / Claude**. If another provider is present, choose our action from the field's action dropdown; VS Code remembers the selected action. The inline **Stop** button cancels generation.
@@ -21,8 +21,19 @@ The inline trial was tested with desktop VS Code 1.145.2, the proposal explicitl
 - If nothing is staged, tracked unstaged changes are used. The progress notification tells you which source is active.
 - New, untracked files must be staged first. Unsaved editor buffers are not part of Git's diff.
 - Binary changes contribute Git's file-level metadata, not their binary contents.
-- Empty diffs, unresolved conflicts and diffs over 100 KiB are rejected with an explanation. The extension never silently truncates a patch.
+- Empty diffs and unresolved conflicts are rejected with an explanation.
 - In a workspace with multiple repositories, the Source Control action targets its own repository. The Command Palette action asks you to choose.
+
+## Large changes
+
+Diffs of any practical size work. A diff within `commitDraft.maxDiffBytes` (256 KB by default) is sent in full. A larger one is condensed to fit, never rejected, and the progress notification says so:
+
+- An overview lists every changed file with its added and removed line counts.
+- Patch excerpts share the remaining space fairly: small files stay whole, long ones are shortened with a marker saying how many lines were left out.
+- Lock files, minified files, source maps and snapshots appear only in the overview, so they do not crowd out real code.
+- The prompt tells the model the diff is condensed and asks it to describe the change as a whole without guessing at omitted details.
+
+Git output is read up to 32 MB. Beyond that, the AI tool receives the file overview alone. In that case only, an edit during generation that keeps every file's line counts unchanged is not detected as a change.
 
 The extension does not stage, commit, push or modify project files. Replacing an existing message requires confirmation. If your message, HEAD or selected diff changes during generation, the result opens as a separate unsaved draft instead of overwriting the input. Cancelling or failing a request preserves the current input. Only one request per repository can run at once.
 
@@ -41,11 +52,13 @@ Open Settings and search for `commitDraft`.
 | `commitDraft.claudeModel` | empty | Optional model override |
 | `commitDraft.conventionalCommits` | `false` | Request `type(scope): description` format |
 | `commitDraft.timeoutSeconds` | `120` | Timeout, from 10 to 600 seconds |
-| `commitDraft.maxDiffBytes` | `102400` | Diff limit, from 1 KiB to 1 MiB |
+| `commitDraft.maxDiffBytes` | `262144` | Diff size sent in full, from 1 KB to 1 MB; larger diffs are condensed to fit |
 
 Provider, executable, model and resource-limit settings are machine-scoped. A repository cannot supply its own executable through workspace settings. Blank model overrides use the CLI defaults; Codex user configuration is deliberately not loaded for these single-purpose requests.
 
-Malformed settings are rejected before asking to replace your message or starting a provider. The error identifies the setting and offers **Open Settings**.
+Malformed settings are rejected before asking to replace your message or starting a provider. The error identifies the setting and offers **Open Settings**. A missing executable or a timeout offers the same button, opened at the setting that fixes it.
+
+A full 256 KB prompt of generated TypeScript measured about 80,000 tokens with Codex and 150,000 with Claude (whose tokenizer counts code more densely), so the default fits Codex's 272,000-token and Claude's 1,000,000-token context windows. Larger values cost more usage per large commit. The 1 MB maximum suits Claude; Codex models run out of context well before it. A prompt over the model's context is rejected by the AI tool, and the extension shows that error.
 
 On Windows, use the provider's native `.exe` installation and configure its full path if needed. `.cmd` and `.bat` shims are not supported because they require shell interpretation. On macOS/Linux, CLI executables installed on your PATH work, including the official npm-installed Codex launcher. Restart VS Code after installing a CLI if the extension cannot find it.
 
@@ -54,6 +67,8 @@ With WSL, SSH or Dev Containers, this extension runs in the workspace extension 
 ## Data and execution
 
 Clicking Generate sends the chosen diff to the selected AI provider using your existing CLI authentication, account terms and usage limits. Review the staged changes before invoking it. The extension does not log the patch, store credentials, persist generated history or automatically switch providers.
+
+When a provider fails, its own reason is shown, such as an unknown model or a sign-in problem. For Claude this is the `result` text of its JSON error response. Codex echoes the prompt on stderr, so only its `ERROR:` lines are read; the rest of stderr is kept as a short in-memory tail and never shown or logged. Reasons are reduced to one line of at most 300 characters.
 
 Each provider runs in a new temporary directory. The prompt travels through stdin rather than command arguments. Codex runs non-interactively, ephemerally and read-only, with user configuration, shell tools, apps, plugins and web search disabled. Claude runs in safe mode, with built-in tools and MCP tools disabled and session persistence off. Managed organizational policies still apply. These flags do not change the provider's server-side retention policy.
 
@@ -66,8 +81,10 @@ Diff selection, validation and insertion rules are deterministic. AI-generated w
 | Module | Responsibility |
 | --- | --- |
 | `extension.ts` | Native VS Code commands, repository selection, progress and safe insertion |
-| `diff.ts` | Bounded, read-only Git snapshot collection |
-| `providers.ts` | Documented Codex/Claude CLI invocation and response handling |
+| `diff.ts` | Bounded, read-only Git snapshot collection and change fingerprinting |
+| `condense.ts` | Fitting an oversized diff into the size budget |
+| `providers.ts` | Documented Codex/Claude CLI invocation, response handling and error reasons |
+| `errors.ts` | Errors that point at the setting which resolves them |
 | `message.ts` | Prompt construction and commit-message validation |
 | `process.ts` | Child-process lifecycle, output bounds, timeout and cancellation |
 | `git-api.d.ts` | Minimal types for the built-in Git extension's version 1 API |
@@ -95,7 +112,7 @@ Each build clears `dist/` first, including any previously generated VSIX. `npm r
 
 The inline icon uses VS Code's native [`contributes.icons`](https://code.visualstudio.com/api/references/contribution-points#contributes.icons) registration. `resources/commit-draft.woff` contains one monochrome glyph (U+E001), with editable artwork in `resources/commit-draft.svg`; VS Code supplies theme colors and button states.
 
-`npm test` type-checks, builds and runs tests against real temporary Git repositories and child processes. `test:integration` uses the official VS Code test runner with a disposable editor profile, two repositories and fake external AI executables; it makes no AI requests. On Linux without a display, run it with `xvfb-run -a npm run test:integration`. Set `VSCODE_EXECUTABLE_PATH` to an existing VS Code executable to avoid a test-editor download.
+`npm test` type-checks, builds and runs tests against real temporary Git repositories and child processes. `test:integration` uses the official VS Code test runner with a disposable editor profile, two repositories and fake external AI executables; it makes no AI requests. On Linux without a display, run it with `xvfb-run -a npm run test:integration`. Set `VSCODE_EXECUTABLE_PATH` to an existing VS Code Electron binary (for example `/usr/share/code/code`, not the `code` CLI wrapper, which exits without running the tests) to avoid a test-editor download. When launching from inside a VS Code extension host, unset `ELECTRON_RUN_AS_NODE` first.
 
 The test runner's optional VS Code download cache (`.vscode-test/`) and installed dependencies (`node_modules/`) are managed by their tools and retained across builds.
 
@@ -103,7 +120,7 @@ The executable fixtures for provider and extension-host tests require macOS/Linu
 
 TypeScript uses `module: "preserve"` and `moduleResolution: "bundler"` to match esbuild's source resolution. esbuild emits the CommonJS bundle expected by the extension host. The configuration passes both the pinned TypeScript 5.9.3 compiler and TypeScript 6.0.3 without deprecation suppression.
 
-Validation on November 7, 2026: all 30 unit tests and 18 extension-host scenarios passed. The inline argument and cancellation contract is covered by the extension-host suite. A separate UI smoke test also clicked the actual inline Generate and Stop actions in an isolated editor and verified insertion, cancellation and temporary-directory cleanup. Earlier real requests using a small synthetic diff passed with Codex 0.164.0 and Claude Code 2.1.312; provider invocation flags are unchanged. Windows and macOS have not been exercised; the Windows process-tree implementation uses the documented native command.
+Validation on November 9, 2026: all 40 unit tests and 18 extension-host scenarios passed on Linux with VS Code 1.145.2. Real requests with Codex 0.164.0 and Claude Code 2.1.312 used a synthetic 2.2 MB, 104-file staged diff, condensed to 252 KB: both returned accurate messages, in 5 seconds (Codex, about 79,000 tokens) and 13 seconds (Claude, about 153,000 input tokens). The inline argument and cancellation contract is covered by the extension-host suite. Windows and macOS have not been exercised; the Windows process-tree implementation uses the documented native command.
 
 The package uses the local publisher identifier `local-tools` for installation from VSIX. This experimental package is for local trials and has not been published.
 

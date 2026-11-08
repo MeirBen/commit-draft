@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 export interface ProcessOptions {
   cwd: string;
@@ -12,11 +13,14 @@ export interface ProcessOptions {
 }
 
 export class ProcessError extends Error {
-  constructor(message: string, readonly exitCode?: number) {
+  constructor(message: string, readonly failure: 'start' | 'exit' | 'timeout' | 'output-limit' | 'input', readonly exitCode?: number,
+    readonly stdout = '', readonly stderrTail = '') {
     super(message);
     this.name = 'ProcessError';
   }
 }
+
+const STDERR_TAIL_BYTES = 4096;
 
 function abortError(): Error {
   return Object.assign(new Error('Generation cancelled.'), { name: 'AbortError' });
@@ -40,10 +44,8 @@ async function terminateProcessTree(child: ChildProcess): Promise<void> {
   try { process.kill(-pid, 'SIGTERM'); }
   catch { return; }
   // A parent may exit while a descendant ignores SIGTERM. Wait for the forced group cleanup.
-  await new Promise<void>(resolve => setTimeout(() => {
-    try { process.kill(-pid, 'SIGKILL'); } catch { /* The group has already exited. */ }
-    resolve();
-  }, 500));
+  await delay(500);
+  try { process.kill(-pid, 'SIGKILL'); } catch { /* The group has already exited. */ }
 }
 
 export function runProcess(executable: string, args: readonly string[], options: ProcessOptions): Promise<string> {
@@ -65,7 +67,14 @@ export function runProcess(executable: string, args: readonly string[], options:
     });
     const chunks: Buffer[] = [];
     let size = 0;
+    let stderrTail = Buffer.alloc(0);
+    let stderrTruncated = false;
     let settled = false;
+    const stdout = (): string => Buffer.concat(chunks, size).toString('utf8');
+    const stderrLines = (): string => {
+      const text = stderrTail.toString('utf8');
+      return stderrTruncated ? text.slice(text.indexOf('\n') + 1) : text;
+    };
 
     function finish(error?: Error, terminate = false): void {
       if (settled) { return; }
@@ -78,38 +87,44 @@ export function runProcess(executable: string, args: readonly string[], options:
         return;
       }
       if (error) { reject(error); }
-      else { resolve(Buffer.concat(chunks, size).toString('utf8')); }
+      else { resolve(stdout()); }
     }
 
     const cancel = (): void => finish(abortError(), true);
-    const timeout = setTimeout(() => finish(new Error(`${label} timed out. Check the command in a terminal and try again.`), true), options.timeoutMs);
+    const timeout = setTimeout(() => finish(new ProcessError(
+      `${label} timed out. Check the command in a terminal and try again.`, 'timeout'), true), options.timeoutMs);
     options.signal?.addEventListener('abort', cancel, { once: true });
 
     child.stdout.on('data', (chunk: Buffer) => {
       if (settled) { return; }
       if (size + chunk.length > options.maxBytes) {
-        finish(new Error(`${label} output is too large (limit ${options.maxBytes} bytes).`), true);
+        finish(new ProcessError(`${label} output is too large (limit ${options.maxBytes} bytes).`, 'output-limit'), true);
         return;
       }
       chunks.push(chunk);
       size += chunk.length;
     });
-    // Drain progress output without logging or retaining potentially sensitive code.
-    child.stderr.resume();
+    // Keep only a short tail for provider-specific error extraction; it is never logged or shown verbatim.
+    child.stderr.on('data', (chunk: Buffer) => {
+      const combined = Buffer.concat([stderrTail, chunk]);
+      stderrTruncated ||= combined.length > STDERR_TAIL_BYTES;
+      stderrTail = combined.subarray(Math.max(0, combined.length - STDERR_TAIL_BYTES));
+    });
     child.on('error', (error: NodeJS.ErrnoException) => {
       const message = error.code === 'ENOENT'
         ? `${label} executable not found. Check its installation and executable path, then restart VS Code.`
         : `Could not start ${label} (${error.code ?? 'unknown error'}). Check its path and permissions.`;
-      finish(new ProcessError(message));
+      finish(new ProcessError(message, 'start'));
     });
     child.on('close', (code, signal) => {
       finish(code === 0 ? undefined : new ProcessError(
-        `${label} failed with exit code ${code ?? signal}. Run the command in a terminal for details.`, code ?? undefined));
+        `${label} failed with exit code ${code ?? signal}. Run the command in a terminal for details.`,
+        'exit', code ?? undefined, stdout(), stderrLines()));
     });
     child.stdin.on('error', (error: NodeJS.ErrnoException) => {
       // A fast exit can close stdin before the prompt is written; let close report its exit code.
       if (error.code !== 'EPIPE' && error.code !== 'ERR_STREAM_DESTROYED') {
-        finish(new ProcessError('Could not send input to the command.'), true);
+        finish(new ProcessError('Could not send input to the command.', 'input'), true);
       }
     });
     child.stdin.end(options.input ?? '');

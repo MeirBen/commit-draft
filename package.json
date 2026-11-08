@@ -3,7 +3,7 @@
   "displayName": "Codex / Claude Commit Message",
   "description": "Generate a commit-message draft from your Git diff using your installed Codex or Claude CLI.",
   "icon": "resources/icon.png",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "publisher": "local-tools",
   "license": "MIT",
   "engines": {
@@ -17,6 +17,8 @@
   "keywords": [
     "git",
     "commit",
+    "commit message",
+    "ai",
     "codex",
     "claude"
   ],
@@ -84,36 +86,46 @@
           ],
           "default": "codex",
           "scope": "machine",
-          "description": "Installed CLI to use. It reuses that tool's existing sign-in."
+          "description": "Installed CLI to use. It reuses that tool's existing sign-in.",
+          "enumDescriptions": [
+            "OpenAI Codex CLI",
+            "Anthropic Claude Code CLI"
+          ],
+          "order": 1
         },
         "commitDraft.codexPath": {
           "type": "string",
           "default": "codex",
           "scope": "machine",
-          "description": "Codex executable name or absolute path, without arguments. On Windows use a native .exe, not a .cmd shim."
+          "description": "Codex executable name or absolute path, without arguments. On Windows use a native .exe, not a .cmd shim.",
+          "order": 3
         },
         "commitDraft.claudePath": {
           "type": "string",
           "default": "claude",
           "scope": "machine",
-          "description": "Claude executable name or absolute path, without arguments. On Windows use a native .exe, not a .cmd shim."
+          "description": "Claude executable name or absolute path, without arguments. On Windows use a native .exe, not a .cmd shim.",
+          "order": 5
         },
         "commitDraft.codexModel": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Optional Codex model. Empty uses the CLI's built-in default, without user config overrides."
+          "description": "Optional Codex model. Empty uses the CLI's built-in default, without user config overrides.",
+          "order": 4
         },
         "commitDraft.claudeModel": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Optional Claude model. Empty uses the CLI default."
+          "description": "Optional Claude model. Empty uses the CLI default.",
+          "order": 6
         },
         "commitDraft.conventionalCommits": {
           "type": "boolean",
           "default": false,
-          "description": "Request Conventional Commits format, such as fix: or feat:."
+          "description": "Request Conventional Commits format, such as fix: or feat:.",
+          "order": 2
         },
         "commitDraft.timeoutSeconds": {
           "type": "integer",
@@ -121,15 +133,17 @@
           "minimum": 10,
           "maximum": 600,
           "scope": "machine",
-          "description": "Maximum seconds to wait for the selected AI tool."
+          "description": "Maximum seconds to wait for the selected AI tool.",
+          "order": 8
         },
         "commitDraft.maxDiffBytes": {
           "type": "integer",
-          "default": 102400,
+          "default": 262144,
           "minimum": 1024,
           "maximum": 1048576,
           "scope": "machine",
-          "description": "Maximum diff size sent to the AI tool. Larger diffs are rejected, never silently truncated."
+          "markdownDescription": "Maximum diff size, in bytes, sent to the AI tool. Larger diffs are condensed to fit rather than rejected: every changed file is listed with its line counts, and long file patches are shortened. Lock files and minified files are summarized only. A full 256 KB prompt measured about 80,000 tokens with Codex and 150,000 with Claude; larger values cost more and must fit the model's context window.",
+          "order": 7
         }
       }
     }

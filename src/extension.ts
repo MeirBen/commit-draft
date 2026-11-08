@@ -1,27 +1,31 @@
 import * as vscode from 'vscode';
 import { basename, isAbsolute } from 'node:path';
-import { collectDiff, type DiffSnapshot } from './diff';
-import { generateMessage, type ProviderOptions } from './providers';
+import { collectDiff, DEFAULT_BUDGET, READ_LIMIT, type DiffSnapshot } from './diff';
+import { SettingError } from './errors';
+import { generateMessage, PROVIDER_NAMES, type ProviderOptions } from './providers';
 import type { GitAPI, GitExtension, GitRepository } from './git-api';
 
 const pending = new Map<AbortController, Promise<void>>();
+const activeRepositories = new Set<string>();
 let stopping = false;
 
 export function activate(context: vscode.ExtensionContext): void {
   stopping = false;
-  const active = new Set<string>();
   context.subscriptions.push(vscode.commands.registerCommand('commitDraft.selectProvider', async () => {
+    const config = vscode.workspace.getConfiguration('commitDraft');
+    const current = config.get<unknown>('provider');
     const selected = await vscode.window.showQuickPick([
       { label: 'Codex', description: 'Use your installed Codex CLI', value: 'codex' },
       { label: 'Claude', description: 'Use your installed Claude Code CLI', value: 'claude' },
-    ], { title: 'Commit Message Provider', placeHolder: 'Choose the tool you have installed and signed in to' });
+    ].map(item => item.value === current ? { ...item, description: `${item.description} (current)` } : item),
+    { title: 'Commit Message Provider', placeHolder: 'Choose the tool you have installed and signed in to' });
     if (selected) {
-      await vscode.workspace.getConfiguration('commitDraft').update('provider', selected.value, vscode.ConfigurationTarget.Global);
+      await config.update('provider', selected.value, vscode.ConfigurationTarget.Global);
     }
   }));
   context.subscriptions.push(vscode.commands.registerCommand('commitDraft.generate',
     (sourceControl?: unknown, _changes?: unknown, token?: vscode.CancellationToken) =>
-      generateCommitMessage(sourceControl, active, token)));
+      generateCommitMessage(sourceControl, token)));
 }
 
 export async function deactivate(): Promise<void> {
@@ -68,7 +72,7 @@ async function waitForGit(git: GitAPI, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function generateCommitMessage(sourceControl: unknown, active: Set<string>, inputToken?: vscode.CancellationToken): Promise<void> {
+async function generateCommitMessage(sourceControl: unknown, inputToken?: vscode.CancellationToken): Promise<void> {
   try {
     if (stopping || inputToken?.isCancellationRequested) { return; }
     if (!vscode.workspace.isTrusted) { throw new Error('Trust this workspace before running the commit-message tool.'); }
@@ -86,11 +90,11 @@ async function generateCommitMessage(sourceControl: unknown, active: Set<string>
     if (!repository || stopping) { return; }
     if (repository.rootUri.scheme !== 'file') { throw new Error('Open a local Git checkout to generate a commit message.'); }
     const key = repository.rootUri.toString();
-    if (active.has(key)) {
+    if (activeRepositories.has(key)) {
       void vscode.window.showInformationMessage('A commit message is already being generated for this repository.');
       return;
     }
-    active.add(key);
+    activeRepositories.add(key);
     try {
       const { provider, maxDiffBytes } = readOptions(repository.rootUri);
       const initialMessage = repository.inputBox.value;
@@ -98,20 +102,19 @@ async function generateCommitMessage(sourceControl: unknown, active: Set<string>
         'Replace the existing commit message with a new draft?', { modal: true }, 'Replace') !== 'Replace') {
         return;
       }
-      await withProgress(`Generating commit message with ${provider.provider === 'codex' ? 'Codex' : 'Claude'}`,
+      await withProgress(`Generating commit message with ${PROVIDER_NAMES[provider.provider]}`,
         async (progress, signal) => {
+          progress.report({ message: 'Reading changes…' });
           const snapshot = await collectDiff(git.git.path, repository.rootUri.fsPath, signal, maxDiffBytes);
-          progress.report({ message: snapshot.source === 'staged' ? 'Using staged changes' : 'Using tracked unstaged changes' });
+          progress.report({ message: describeSnapshot(snapshot, maxDiffBytes) });
           const message = await generateMessage(provider, snapshot, signal);
           signal.throwIfAborted();
-          let current: DiffSnapshot | undefined;
-          try { current = await collectDiff(git.git.path, repository.rootUri.fsPath, signal, maxDiffBytes); }
-          catch { /* A clean, closed or conflicted repository makes the draft stale. */ }
+          // A clean, closed or conflicted repository makes the draft stale.
+          const current = await collectDiff(git.git.path, repository.rootUri.fsPath, signal, maxDiffBytes).catch(() => undefined);
           signal.throwIfAborted();
           // The Git API creates fresh wrappers on each repositories access; compare URIs, not objects.
           const currentRepository = git.repositories.find(item => item.rootUri.toString() === key);
-          if (!current || current.source !== snapshot.source || current.text !== snapshot.text || current.head !== snapshot.head ||
-            !currentRepository || currentRepository.inputBox.value !== initialMessage) {
+          if (current?.fingerprint !== snapshot.fingerprint || currentRepository?.inputBox.value !== initialMessage) {
             const document = await vscode.workspace.openTextDocument({ content: message, language: 'git-commit' });
             await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true });
             void vscode.window.showInformationMessage('The changes or commit message changed during generation. Your draft is open in a separate editor.');
@@ -121,16 +124,14 @@ async function generateCommitMessage(sourceControl: unknown, active: Set<string>
           await vscode.commands.executeCommand('workbench.view.scm');
         }, inputToken);
     } finally {
-      active.delete(key);
+      activeRepositories.delete(key);
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') { return; }
     const message = `Commit message: ${error instanceof Error ? error.message : 'Generation failed. Try again.'}`;
-    if (error instanceof ConfigurationError) {
-      void vscode.window.showErrorMessage(message, 'Open Settings').then(action => {
-        if (action) { return vscode.commands.executeCommand('workbench.action.openSettings', '@ext:local-tools.codex-claude-commit'); }
-        return undefined;
-      });
+    if (error instanceof SettingError) {
+      void vscode.window.showErrorMessage(message, 'Open Settings').then(action =>
+        action && vscode.commands.executeCommand('workbench.action.openSettings', `commitDraft.${error.setting}`));
     } else { void vscode.window.showErrorMessage(message); }
   }
 }
@@ -152,37 +153,47 @@ async function chooseRepository(git: GitAPI, context: unknown): Promise<GitRepos
   return selected?.repository;
 }
 
-class ConfigurationError extends Error {
-  constructor(setting: string, requirement: string) {
-    super(`Set commitDraft.${setting} to ${requirement}.`);
-  }
+function describeSnapshot(snapshot: DiffSnapshot, budget: number): string {
+  const files = `${snapshot.files} ${snapshot.files === 1 ? 'file' : 'files'}`;
+  const size = snapshot.bytes === undefined ? `over ${formatBytes(READ_LIMIT)}` : formatBytes(snapshot.bytes);
+  const source = snapshot.source === 'staged' ? 'Staged changes' : 'Nothing staged, using tracked changes';
+  return `${source}: ${files}, ${size}${snapshot.condensed ? ` (condensed to fit ${formatBytes(budget)})` : ''}`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) { return `${bytes} bytes`; }
+  if (bytes < 1048576) { return `${Math.round(bytes / 1024)} KB`; }
+  return `${(bytes / 1048576).toFixed(1).replace(/\.0$/, '')} MB`;
+}
+
+function settingError(setting: string, requirement: string): SettingError {
+  return new SettingError(`Set commitDraft.${setting} to ${requirement}.`, setting);
 }
 
 function readOptions(uri: vscode.Uri): { provider: ProviderOptions; maxDiffBytes: number } {
   const config = vscode.workspace.getConfiguration('commitDraft', uri);
+  const integer = (setting: string, fallback: number, min: number, max: number): number => {
+    const value = config.get<unknown>(setting, fallback);
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
+      throw settingError(setting, `an integer between ${min} and ${max}`);
+    }
+    return value;
+  };
   const provider = config.get<unknown>('provider', 'codex');
-  if (provider !== 'codex' && provider !== 'claude') { throw new ConfigurationError('provider', '"codex" or "claude"'); }
+  if (provider !== 'codex' && provider !== 'claude') { throw settingError('provider', '"codex" or "claude"'); }
   const path = config.get<unknown>(`${provider}Path`, provider);
-  if (typeof path !== 'string' || !path.trim() || /[\0\r\n]/.test(path) ||
-    (!isAbsolute(path.trim()) && /[\\/\s]/.test(path.trim()))) {
-    throw new ConfigurationError(`${provider}Path`, 'an executable name or absolute path without command arguments');
+  const executable = typeof path === 'string' && !/[\0\r\n]/.test(path) ? path.trim() : '';
+  if (!executable || (!isAbsolute(executable) && /[\\/\s]/.test(executable))) {
+    throw settingError(`${provider}Path`, 'an executable name or absolute path without command arguments');
   }
   const model = config.get<unknown>(`${provider}Model`, '');
   if (typeof model !== 'string' || /[\0\r\n]/.test(model)) {
-    throw new ConfigurationError(`${provider}Model`, 'a model name string, or leave it empty for the default');
+    throw settingError(`${provider}Model`, 'a model name string, or leave it empty for the default');
   }
   const conventional = config.get<unknown>('conventionalCommits', false);
-  if (typeof conventional !== 'boolean') { throw new ConfigurationError('conventionalCommits', 'true or false'); }
-  const timeout = config.get<unknown>('timeoutSeconds', 120);
-  if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < 10 || timeout > 600) {
-    throw new ConfigurationError('timeoutSeconds', 'an integer between 10 and 600');
-  }
-  const maxDiffBytes = config.get<unknown>('maxDiffBytes', 102400);
-  if (typeof maxDiffBytes !== 'number' || !Number.isInteger(maxDiffBytes) || maxDiffBytes < 1024 || maxDiffBytes > 1048576) {
-    throw new ConfigurationError('maxDiffBytes', 'an integer between 1024 and 1048576');
-  }
+  if (typeof conventional !== 'boolean') { throw settingError('conventionalCommits', 'true or false'); }
   return {
-    provider: { provider, executable: path.trim(), model, conventional, timeoutMs: timeout * 1000 },
-    maxDiffBytes,
+    provider: { provider, executable, model, conventional, timeoutMs: integer('timeoutSeconds', 120, 10, 600) * 1000 },
+    maxDiffBytes: integer('maxDiffBytes', DEFAULT_BUDGET, 1024, 1048576),
   };
 }
