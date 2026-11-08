@@ -1,14 +1,14 @@
 # Contributing
 
-Thanks for helping improve Commit Draft. Bug reports, ideas and pull requests are welcome through [GitHub issues](https://github.com/MeirBen/commit-message-assistant/issues).
+Thanks for helping improve Commit Draft. Bug reports, ideas and pull requests are welcome through [GitHub issues](https://github.com/MeirBen/commit-draft/issues).
 
 ## Development setup
 
 You need Node.js 22 or later, npm, Git and VS Code. The test fixtures use Unix executables, so run the tests on Linux or macOS.
 
 ```sh
-git clone https://github.com/MeirBen/commit-message-assistant.git
-cd commit-message-assistant
+git clone https://github.com/MeirBen/commit-draft.git
+cd commit-draft
 npm ci
 npm test
 ```

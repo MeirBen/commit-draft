@@ -8,12 +8,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/MeirBen/commit-message-assistant.git"
+    "url": "https://github.com/MeirBen/commit-draft.git"
   },
   "bugs": {
-    "url": "https://github.com/MeirBen/commit-message-assistant/issues"
+    "url": "https://github.com/MeirBen/commit-draft/issues"
   },
-  "homepage": "https://github.com/MeirBen/commit-message-assistant#readme",
+  "homepage": "https://github.com/MeirBen/commit-draft#readme",
   "engines": {
     "vscode": "^1.95.0",
     "node": ">=22"
