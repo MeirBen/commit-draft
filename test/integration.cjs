@@ -30,7 +30,7 @@ exports.run = async () => {
   for (const [key, value] of Object.entries({ provider: 'codex', codexPath: process.env.COMMIT_TEST_CLI, claudePath: process.env.COMMIT_TEST_CLI })) {
     await config.update(key, value, vscode.ConfigurationTarget.Global);
   }
-  const extension = vscode.extensions.getExtension('meirb.codex-claude-commit');
+  const extension = vscode.extensions.getExtension('meirb.commit-draft');
   assert.ok(extension);
   await extension.activate();
   assert.ok((await vscode.commands.getCommands()).includes('commitDraft.generate'), 'The generation command must be registered.');

@@ -1,6 +1,6 @@
-# Codex / Claude Commit Message
+# Commit Draft
 
-Draft Git commit messages in VS Code with the **Codex CLI** or **Claude Code** you already use. One click reads your changes and fills the Source Control message box with a draft you can review and edit.
+**AI commit messages for Codex & Claude.** Commit Draft writes Git commit messages in VS Code with the **Codex CLI** or **Claude Code** you already use. One click reads your changes and fills the Source Control message box with a draft you can review and edit.
 
 > **Unofficial.** Not affiliated with or endorsed by OpenAI or Anthropic.
 
@@ -27,7 +27,7 @@ Draft Git commit messages in VS Code with the **Codex CLI** or **Claude Code** y
 
 1. Install the extension from the Visual Studio Marketplace, or install a `.vsix` file with **Extensions: Install from VSIX…**.
 2. Check that your CLI works: run `codex` or `claude` in a terminal and sign in.
-3. Open the Command Palette (`Ctrl+Shift+P`, or `Cmd+Shift+P` on macOS) and run **Codex / Claude: Select Commit Message Provider**. Codex is the default.
+3. Open the Command Palette (`Ctrl+Shift+P`, or `Cmd+Shift+P` on macOS) and run **Commit Draft: Select AI Provider**. Codex is the default.
 4. Stage the changes you want to commit.
 5. Click the **Generate** button (the speech-bubble icon) in the Source Control title bar.
 6. Review the draft, edit it if needed, and commit as usual.
@@ -38,8 +38,8 @@ To stop a request, click **Cancel** on the progress notification.
 
 | Command | What it does |
 | --- | --- |
-| **Generate Commit Message with Codex / Claude** | Writes a draft for the current repository. With several repositories open, the toolbar button uses its own repository and the Command Palette asks you to pick one. |
-| **Codex / Claude: Select Commit Message Provider** | Switches between Codex and Claude. |
+| **Commit Draft: Generate Commit Message** | Writes a draft for the current repository. With several repositories open, the toolbar button uses its own repository and the Command Palette asks you to pick one. |
+| **Commit Draft: Select AI Provider** | Switches between Codex and Claude. |
 
 ## How it works
 

@@ -18,7 +18,7 @@ export function activate(context: vscode.ExtensionContext): void {
       { label: 'Codex', description: 'Use your installed Codex CLI', value: 'codex' },
       { label: 'Claude', description: 'Use your installed Claude Code CLI', value: 'claude' },
     ].map(item => item.value === current ? { ...item, description: `${item.description} (current)` } : item),
-    { title: 'Commit Message Provider', placeHolder: 'Choose the tool you have installed and signed in to' });
+    { title: 'Select AI Provider', placeHolder: 'Choose the tool you have installed and signed in to' });
     if (selected) {
       await config.update('provider', selected.value, vscode.ConfigurationTarget.Global);
     }
@@ -124,7 +124,7 @@ async function generateCommitMessage(sourceControl?: unknown): Promise<void> {
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') { return; }
-    const message = `Commit message: ${error instanceof Error ? error.message : 'Generation failed. Try again.'}`;
+    const message = `Commit Draft: ${error instanceof Error ? error.message : 'Generation failed. Try again.'}`;
     if (error instanceof SettingError) {
       void vscode.window.showErrorMessage(message, 'Open Settings').then(action =>
         action && vscode.commands.executeCommand('workbench.action.openSettings', `commitDraft.${error.setting}`));

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Codex / Claude Commit Message. Bug reports, ideas and pull requests are welcome through [GitHub issues](https://github.com/MeirBen/commit-message-assistant/issues).
+Thanks for helping improve Commit Draft. Bug reports, ideas and pull requests are welcome through [GitHub issues](https://github.com/MeirBen/commit-message-assistant/issues).
 
 ## Development setup
 
@@ -24,7 +24,7 @@ All build output goes to `dist/`, which every build clears first.
 | `npm run build` | Type-checks and bundles `dist/extension.js` with a source map |
 | `npm test` | Builds, then runs the unit tests against real temporary Git repositories and child processes |
 | `npm run test:integration` | Runs the extension inside VS Code with two repositories and fake AI executables; no AI requests are made |
-| `npm run package` | Builds the production bundle and `dist/codex-claude-commit-<version>.vsix` |
+| `npm run package` | Builds the production bundle and `dist/commit-draft-<version>.vsix` |
 | `npm run clean` | Removes `dist/` |
 
 ### Integration tests

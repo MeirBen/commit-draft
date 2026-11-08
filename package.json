@@ -1,7 +1,7 @@
 {
-  "name": "codex-claude-commit",
-  "displayName": "Codex / Claude Commit Message",
-  "description": "Generate a commit-message draft from your Git diff using your installed Codex or Claude CLI. Unofficial; not affiliated with OpenAI or Anthropic.",
+  "name": "commit-draft",
+  "displayName": "Commit Draft: AI Commit Messages for Codex & Claude",
+  "description": "Draft Git commit messages with AI, using the Codex CLI or Claude Code you already use. Unofficial; not affiliated with OpenAI or Anthropic.",
   "icon": "resources/icon.png",
   "version": "0.2.0",
   "publisher": "meirb",
@@ -27,6 +27,7 @@
     "commit",
     "commit message",
     "ai",
+    "conventional commits",
     "codex",
     "claude"
   ],
@@ -61,14 +62,13 @@
     "commands": [
       {
         "command": "commitDraft.generate",
-        "title": "Generate Commit Message with Codex / Claude",
+        "title": "Commit Draft: Generate Commit Message",
         "icon": "$(commit-draft-generate)",
         "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "commitDraft.selectProvider",
-        "title": "Select Commit Message Provider",
-        "category": "Codex / Claude"
+        "title": "Commit Draft: Select AI Provider"
       }
     ],
     "menus": {
@@ -81,7 +81,7 @@
       ]
     },
     "configuration": {
-      "title": "Codex / Claude Commit Message",
+      "title": "Commit Draft",
       "properties": {
         "commitDraft.provider": {
           "type": "string",

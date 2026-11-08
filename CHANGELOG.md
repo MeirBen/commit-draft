@@ -16,6 +16,7 @@ First Marketplace release.
 
 ### Changed in 0.2.0
 
+- Renamed to **Commit Draft** (extension ID `meirb.commit-draft`). Setting names are unchanged.
 - The **Generate** button is in the Source Control title bar. The button inside the message box needed a proposed VS Code API, which Marketplace extensions cannot use.
 - `commitDraft.maxDiffBytes` now defaults to 256 KB (was 100 KB) and sets the size sent in full rather than a hard limit.
 - Git commands may take up to 60 seconds (was 15) in large repositories.
