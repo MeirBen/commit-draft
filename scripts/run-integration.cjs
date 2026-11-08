@@ -48,7 +48,6 @@ process.stdin.on('end', () => {
       extensionTestsPath: resolve(__dirname, '../test/integration.cjs'),
       extensionTestsEnv: { COMMIT_TEST_ROOT: root, COMMIT_TEST_CLI: executable },
       launchArgs: [workspace, '--user-data-dir', join(root, 'user'), '--extensions-dir', join(root, 'extensions'),
-        '--enable-proposed-api=local-tools.codex-claude-commit',
         '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes', '--disable-gpu', '--disable-updates'],
     });
   } finally {

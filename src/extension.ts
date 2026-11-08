@@ -23,9 +23,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await config.update('provider', selected.value, vscode.ConfigurationTarget.Global);
     }
   }));
-  context.subscriptions.push(vscode.commands.registerCommand('commitDraft.generate',
-    (sourceControl?: unknown, _changes?: unknown, token?: vscode.CancellationToken) =>
-      generateCommitMessage(sourceControl, token)));
+  context.subscriptions.push(vscode.commands.registerCommand('commitDraft.generate', generateCommitMessage));
 }
 
 export async function deactivate(): Promise<void> {
@@ -35,18 +33,16 @@ export async function deactivate(): Promise<void> {
 }
 
 async function withProgress(title: string,
-  task: (progress: vscode.Progress<{ message?: string }>, signal: AbortSignal) => Promise<void>,
-  inputToken?: vscode.CancellationToken): Promise<void> {
+  task: (progress: vscode.Progress<{ message?: string }>, signal: AbortSignal) => Promise<void>): Promise<void> {
   if (stopping) { return; }
   const controller = new AbortController();
   const operation = Promise.resolve(vscode.window.withProgress({
     location: vscode.ProgressLocation.Notification, title, cancellable: true,
   }, async (progress, token) => {
     const subscription = token.onCancellationRequested(() => controller.abort());
-    const inputSubscription = inputToken?.onCancellationRequested(() => controller.abort());
-    if (token.isCancellationRequested || inputToken?.isCancellationRequested) { controller.abort(); }
+    if (token.isCancellationRequested) { controller.abort(); }
     try { await task(progress, controller.signal); }
-    finally { subscription.dispose(); inputSubscription?.dispose(); }
+    finally { subscription.dispose(); }
   }));
   pending.set(controller, operation);
   try { await operation; }
@@ -72,9 +68,9 @@ async function waitForGit(git: GitAPI, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function generateCommitMessage(sourceControl: unknown, inputToken?: vscode.CancellationToken): Promise<void> {
+async function generateCommitMessage(sourceControl?: unknown): Promise<void> {
   try {
-    if (stopping || inputToken?.isCancellationRequested) { return; }
+    if (stopping) { return; }
     if (!vscode.workspace.isTrusted) { throw new Error('Trust this workspace before running the commit-message tool.'); }
     const extension = vscode.extensions.getExtension<GitExtension>('vscode.git');
     if (!extension) { throw new Error('Enable VS Code’s built-in Git extension first.'); }
@@ -83,7 +79,7 @@ async function generateCommitMessage(sourceControl: unknown, inputToken?: vscode
     if (!gitExtension.enabled) { throw new Error('Enable Git in VS Code settings and ensure Git is installed.'); }
     const git = gitExtension.getAPI(1);
     if (git.state !== 'initialized') {
-      await withProgress('Waiting for Git repositories', (_progress, signal) => waitForGit(git, signal), inputToken);
+      await withProgress('Waiting for Git repositories', (_progress, signal) => waitForGit(git, signal));
     }
     if (stopping) { return; }
     const repository = await chooseRepository(git, sourceControl);
@@ -122,7 +118,7 @@ async function generateCommitMessage(sourceControl: unknown, inputToken?: vscode
           }
           currentRepository.inputBox.value = message;
           await vscode.commands.executeCommand('workbench.view.scm');
-        }, inputToken);
+        });
     } finally {
       activeRepositories.delete(key);
     }
@@ -138,8 +134,7 @@ async function generateCommitMessage(sourceControl: unknown, inputToken?: vscode
 
 async function chooseRepository(git: GitAPI, context: unknown): Promise<GitRepository | undefined> {
   const repositories = git.repositories;
-  const root = context instanceof vscode.Uri ? context
-    : context && typeof context === 'object' && 'rootUri' in context ? context.rootUri : undefined;
+  const root = context && typeof context === 'object' && 'rootUri' in context ? context.rootUri : undefined;
   if (root instanceof vscode.Uri) {
     const repository = repositories.find(item => item.rootUri.toString() === root.toString());
     if (!repository) { throw new Error('The selected Git repository is no longer open.'); }

@@ -1,11 +1,19 @@
 {
   "name": "codex-claude-commit",
   "displayName": "Codex / Claude Commit Message",
-  "description": "Generate a commit-message draft from your Git diff using your installed Codex or Claude CLI.",
+  "description": "Generate a commit-message draft from your Git diff using your installed Codex or Claude CLI. Unofficial; not affiliated with OpenAI or Anthropic.",
   "icon": "resources/icon.png",
   "version": "0.2.0",
-  "publisher": "local-tools",
+  "publisher": "meirb",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MeirBen/commit-message-assistant.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MeirBen/commit-message-assistant/issues"
+  },
+  "homepage": "https://github.com/MeirBen/commit-message-assistant#readme",
   "engines": {
     "vscode": "^1.95.0",
     "node": ">=22"
@@ -28,9 +36,6 @@
   ],
   "extensionDependencies": [
     "vscode.git"
-  ],
-  "enabledApiProposals": [
-    "contribSourceControlInputBoxMenu"
   ],
   "preview": true,
   "capabilities": {
@@ -67,7 +72,7 @@
       }
     ],
     "menus": {
-      "scm/inputBox": [
+      "scm/title": [
         {
           "command": "commitDraft.generate",
           "when": "scmProvider == git",
@@ -155,7 +160,7 @@
     "test": "npm run build -- --test && node --test test/*.test.cjs",
     "test:integration": "npm run build && node scripts/run-integration.cjs",
     "vscode:prepublish": "npm run build -- --production",
-    "package": "vsce package --no-dependencies --allow-missing-repository --out dist"
+    "package": "vsce package --no-dependencies --out dist"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
