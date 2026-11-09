@@ -3,7 +3,7 @@
   "displayName": "Commit Draft: AI Commit Messages for Codex & Claude",
   "description": "Draft Git commit messages with AI, using the Codex CLI or Claude Code you already use. Unofficial; not affiliated with OpenAI or Anthropic.",
   "icon": "resources/icon.png",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "meirb",
   "license": "MIT",
   "repository": {
