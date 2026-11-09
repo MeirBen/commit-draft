@@ -2,6 +2,13 @@
 
 All notable changes to this extension are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/).
 
+## [0.2.1](https://github.com/MeirBen/commit-draft/compare/v0.2.0...v0.2.1) (2026-11-09)
+
+
+### Fixed
+
+* show sizes just under 1 MB as 1 MB instead of 1024 KB ([66883a9](https://github.com/MeirBen/commit-draft/commit/66883a97b524db2d406a65a2c65262a5fbda9270))
+
 ## [0.2.0] - 2026-11-09
 
 First Marketplace release.
