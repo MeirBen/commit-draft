@@ -62,13 +62,16 @@ Keep these when changing behavior:
 
 - Keep each pull request focused on one change.
 - Add or update tests, and make sure `npm test` and `npm run test:integration` pass.
-- Update the README for user-visible changes, and add an entry under a new version in [CHANGELOG.md](CHANGELOG.md).
+- Update the README for user-visible changes.
+- Write commit messages as [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, …). They decide the next version and the [CHANGELOG.md](CHANGELOG.md) entry.
 
 ## Releasing
 
-1. Update `version` in `package.json` and add the release to `CHANGELOG.md`.
-2. Run `npm test` and `npm run test:integration`.
-3. Publish with `npx vsce publish`, which runs the production build first. The first time, sign in with `npx vsce login meirb` using an Azure DevOps personal access token that has the **Marketplace (Manage)** scope.
+Releases are automated by [publish.yml](.github/workflows/publish.yml) with [release-please](https://github.com/googleapis/release-please):
+
+1. Every push to `main` runs `npm test`, then release-please opens or updates a release pull request that bumps `version` in `package.json` and adds the release to `CHANGELOG.md`. `feat:` bumps the minor version, `fix:` and `perf:` the patch version, and a breaking change (`feat!:`) the minor version while below 1.0. Other types, such as `chore:` and `docs:`, do not start a release.
+2. Run `npm run test:integration`, then merge the release pull request.
+3. The merge tags the release, creates the GitHub release, and publishes to the Marketplace with `npx vsce publish --oidc` through Marketplace trusted publishing. No personal access token is needed.
 
 Alternatively, run `npm run package` and upload the `.vsix` on the [Marketplace management page](https://marketplace.visualstudio.com/manage).
 
